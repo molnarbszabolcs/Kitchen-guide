@@ -1,45 +1,86 @@
 import React, { useState } from 'react';
 import { ShoppingItem } from '../types';
-import { generateId, formatQuantity } from '../utils/helpers';
+import { formatQuantity } from '../utils/helpers';
+import { supabase } from '../utils/supabase';
 
 interface ShoppingManagerProps {
   items: ShoppingItem[];
   setItems: React.Dispatch<React.SetStateAction<ShoppingItem[]>>;
 }
 
+const mapShoppingRow = (row: any): ShoppingItem => ({
+  id: row.id,
+  name: row.name,
+  quantity: Number(row.quantity ?? 0),
+  unit: row.unit ?? '',
+  completed: !!row.completed,
+  fromRecipeId: row.from_recipe_id ?? undefined,
+});
+
 const ShoppingManager: React.FC<ShoppingManagerProps> = ({ items, setItems }) => {
   const [manualName, setManualName] = useState('');
   const [manualQty, setManualQty] = useState<number | string>(1);
   const [manualUnit, setManualUnit] = useState('');
 
-  const toggleComplete = (id: string) => {
-    setItems(items.map(item => 
-      item.id === id ? { ...item, completed: !item.completed } : item
-    ));
+  const toggleComplete = async (id: string) => {
+    const target = items.find(i => i.id === id);
+    if (!target) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('shopping_items')
+        .update({ completed: !target.completed })
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      setItems(items.map(item => (item.id === id ? mapShoppingRow(data) : item)));
+    } catch (err) {
+      console.error('Failed to toggle item', err);
+      alert('Nem sikerült módosítani az elemet.');
+    }
   };
 
-  const removeItem = (id: string) => {
-    setItems(items.filter(item => item.id !== id));
+  const removeItem = async (id: string) => {
+    try {
+      const { error } = await supabase.from('shopping_items').delete().eq('id', id);
+      if (error) throw error;
+      setItems(items.filter(item => item.id !== id));
+    } catch (err) {
+      console.error('Failed to delete item', err);
+      alert('Nem sikerült törölni az elemet.');
+    }
   };
 
-  const clearCompleted = () => {
-    if (window.confirm('Clear all completed items?')) {
+  const clearCompleted = async () => {
+    if (!window.confirm('Clear all completed items?')) return;
+    try {
+      const { error } = await supabase.from('shopping_items').delete().eq('completed', true);
+      if (error) throw error;
       setItems(items.filter(item => !item.completed));
+    } catch (err) {
+      console.error('Failed to clear completed items', err);
+      alert('Nem sikerült törölni a teljesített tételeket.');
     }
   };
   
-  const clearAll = () => {
-    if (window.confirm('Clear the entire list?')) {
+  const clearAll = async () => {
+    if (!window.confirm('Clear the entire list?')) return;
+    try {
+      const { error } = await supabase.from('shopping_items').delete().neq('id', '');
+      if (error) throw error;
       setItems([]);
+    } catch (err) {
+      console.error('Failed to clear list', err);
+      alert('Nem sikerült kiüríteni a listát.');
     }
   };
 
-  const handleManualAdd = (e: React.FormEvent) => {
+  const handleManualAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualName.trim()) return;
 
     const newItem: ShoppingItem = {
-      id: generateId(),
       name: manualName,
       quantity: Number(manualQty) || 1,
       unit: manualUnit,
@@ -54,11 +95,41 @@ const ShoppingManager: React.FC<ShoppingManagerProps> = ({ items, setItems }) =>
     );
 
     if (existingIndex > -1) {
-      const updated = [...items];
-      updated[existingIndex].quantity += newItem.quantity;
-      setItems(updated);
+      const target = items[existingIndex];
+      const newQuantity = target.quantity + newItem.quantity;
+      try {
+        const { data, error } = await supabase
+          .from('shopping_items')
+          .update({ quantity: newQuantity })
+          .eq('id', target.id)
+          .select()
+          .single();
+        if (error) throw error;
+        const updated = [...items];
+        updated[existingIndex] = mapShoppingRow(data);
+        setItems(updated);
+      } catch (err) {
+        console.error('Failed to update quantity', err);
+        alert('Nem sikerült frissíteni a mennyiséget.');
+      }
     } else {
-      setItems([newItem, ...items]);
+      try {
+        const { data, error } = await supabase
+          .from('shopping_items')
+          .insert([{
+            name: newItem.name,
+            quantity: newItem.quantity,
+            unit: newItem.unit,
+            completed: false,
+          }])
+          .select()
+          .single();
+        if (error) throw error;
+        setItems([mapShoppingRow(data), ...items]);
+      } catch (err) {
+        console.error('Failed to add item', err);
+        alert('Nem sikerült hozzáadni az elemet.');
+      }
     }
 
     setManualName('');

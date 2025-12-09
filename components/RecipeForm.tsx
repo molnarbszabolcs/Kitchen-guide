@@ -10,6 +10,7 @@ interface RecipeFormProps {
 
 const RecipeForm: React.FC<RecipeFormProps> = ({ initialData, onSave, onCancel }) => {
   const [name, setName] = useState(initialData?.name || '');
+  const [course, setCourse] = useState(initialData?.course || 'főétel');
   const [servings, setServings] = useState(initialData?.servings || 2);
   const [instructions, setInstructions] = useState(initialData?.instructions || '');
   const [externalLink, setExternalLink] = useState(initialData?.externalLink || '');
@@ -40,6 +41,7 @@ const RecipeForm: React.FC<RecipeFormProps> = ({ initialData, onSave, onCancel }
 
     onSave({
       name,
+      course,
       servings,
       instructions,
       ingredients: validIngredients,
@@ -72,7 +74,6 @@ const RecipeForm: React.FC<RecipeFormProps> = ({ initialData, onSave, onCancel }
               required
             />
           </div>
-          
           <div className="flex gap-4">
             <div className="w-1/3">
               <label className="block text-sm font-semibold text-gray-700 mb-1">Servings</label>
@@ -83,6 +84,21 @@ const RecipeForm: React.FC<RecipeFormProps> = ({ initialData, onSave, onCancel }
                 onChange={e => setServings(Number(e.target.value))}
                 className="w-full px-4 py-2 rounded-xl bg-gray-50 border-transparent focus:border-indigo-500 focus:bg-white focus:ring-0 transition-all"
               />
+            </div>
+            <div className="w-1/3">
+              <label className="block text-sm font-semibold text-gray-700 mb-1">Fogás</label>
+              <select
+                value={course}
+                onChange={e => setCourse(e.target.value)}
+                className="w-full px-4 py-2 rounded-xl bg-gray-50 border-transparent focus:border-indigo-500 focus:bg-white focus:ring-0 transition-all"
+              >
+                <option value="reggeli">Reggeli</option>
+                <option value="főétel">Főétel</option>
+                <option value="leves">Leves</option>
+                <option value="főzelék">Főzelék</option>
+                <option value="tészta">Tészta</option>
+                <option value="péksütemény">Péksütemény</option>
+              </select>
             </div>
             <div className="flex-1">
               <label className="block text-sm font-semibold text-gray-700 mb-1">Link (Optional)</label>

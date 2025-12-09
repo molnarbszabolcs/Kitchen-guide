@@ -3,6 +3,7 @@ import { Recipe, Ingredient, ShoppingItem } from '../types';
 import { generateId } from '../utils/helpers';
 import RecipeForm from './RecipeForm';
 import ServingsModal from './ServingsModal';
+import { supabase } from '../utils/supabase';
 
 interface RecipeManagerProps {
   recipes: Recipe[];
@@ -10,32 +11,81 @@ interface RecipeManagerProps {
   onAddToShoppingList: (items: ShoppingItem[]) => void;
 }
 
+const mapRecipeRow = (row: any): Recipe => ({
+  id: row.id,
+  name: row.name,
+  course: row.course || 'főétel',
+  servings: row.servings ?? 0,
+  ingredients: Array.isArray(row.ingredients) ? row.ingredients : [],
+  instructions: row.instructions ?? '',
+  externalLink: row.external_link ?? undefined,
+  createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+});
+
 const RecipeManager: React.FC<RecipeManagerProps> = ({ recipes, setRecipes, onAddToShoppingList }) => {
   const [view, setView] = useState<'list' | 'form'>('list');
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null);
   const [servingsModalRecipe, setServingsModalRecipe] = useState<Recipe | null>(null);
 
   // -- CRUD Operations --
-  const handleSaveRecipe = (recipeData: Omit<Recipe, 'id' | 'createdAt'>) => {
-    if (editingRecipe) {
-      // Update
-      setRecipes(prev => prev.map(r => r.id === editingRecipe.id ? { ...recipeData, id: r.id, createdAt: r.createdAt } : r));
-    } else {
-      // Create
-      const newRecipe: Recipe = {
-        ...recipeData,
-        id: generateId(),
-        createdAt: Date.now(),
-      };
-      setRecipes(prev => [newRecipe, ...prev]);
+  const handleSaveRecipe = async (recipeData: Omit<Recipe, 'id' | 'createdAt'>) => {
+    try {
+      if (editingRecipe) {
+        const { data, error } = await supabase
+          .from('recipes')
+          .update({
+            name: recipeData.name,
+            course: recipeData.course,
+            servings: recipeData.servings,
+            ingredients: recipeData.ingredients,
+            instructions: recipeData.instructions,
+            external_link: recipeData.externalLink ?? null,
+          })
+          .eq('id', editingRecipe.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        const updated = mapRecipeRow(data);
+        setRecipes(prev => prev.map(r => (r.id === updated.id ? updated : r)));
+      } else {
+        const { data, error } = await supabase
+          .from('recipes')
+          .insert([
+            {
+              name: recipeData.name,
+              course: recipeData.course,
+              servings: recipeData.servings,
+              ingredients: recipeData.ingredients,
+              instructions: recipeData.instructions,
+              external_link: recipeData.externalLink ?? null,
+            },
+          ])
+          .select()
+          .single();
+
+        if (error) throw error;
+        const newRecipe = mapRecipeRow(data);
+        setRecipes(prev => [newRecipe, ...prev]);
+      }
+      setView('list');
+      setEditingRecipe(null);
+    } catch (err) {
+      console.error('Failed to save recipe:', err);
+      alert('Nem sikerült menteni a receptet. Ellenőrizd a Supabase kapcsolatot és a táblát.');
     }
-    setView('list');
-    setEditingRecipe(null);
   };
 
-  const handleDeleteRecipe = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this recipe?')) {
+  const handleDeleteRecipe = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this recipe?')) return;
+
+    try {
+      const { error } = await supabase.from('recipes').delete().eq('id', id);
+      if (error) throw error;
       setRecipes(prev => prev.filter(r => r.id !== id));
+    } catch (err) {
+      console.error('Failed to delete recipe:', err);
+      alert('Nem sikerült törölni a receptet.');
     }
   };
 
@@ -112,6 +162,7 @@ const RecipeManager: React.FC<RecipeManagerProps> = ({ recipes, setRecipes, onAd
                 </div>
                 
                 <div className="flex items-center gap-4 text-xs text-gray-500 mb-4 font-medium uppercase tracking-wide">
+                  <span className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded-md text-[11px] font-semibold">{recipe.course}</span>
                   <span><i className="fa-solid fa-users mr-1"></i> {recipe.servings} Servings</span>
                   <span><i className="fa-solid fa-carrot mr-1"></i> {recipe.ingredients.length} Ingredients</span>
                 </div>

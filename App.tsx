@@ -1,55 +1,137 @@
 import React, { useState, useEffect } from 'react';
-import { Tab, Recipe, ShoppingItem, Ingredient } from './types';
-import { generateId } from './utils/helpers';
+import { Tab, Recipe, ShoppingItem } from './types';
 import RecipeManager from './components/RecipeManager';
 import ShoppingManager from './components/ShoppingManager';
+import { supabase } from './utils/supabase';
+
+type RecipeRow = {
+  id: string;
+  name: string;
+  course?: string | null;
+  servings: number;
+  ingredients: any[];
+  instructions?: string;
+  external_link?: string | null;
+  created_at?: string;
+};
+
+type ShoppingRow = {
+  id: string;
+  name: string;
+  quantity: number;
+  unit: string;
+  completed: boolean;
+  from_recipe_id?: string | null;
+  created_at?: string;
+};
+
+const mapRecipe = (row: RecipeRow): Recipe => ({
+  id: row.id,
+  name: row.name,
+  course: row.course || 'főétel',
+  servings: row.servings ?? 0,
+  ingredients: Array.isArray(row.ingredients) ? row.ingredients : [],
+  instructions: row.instructions ?? '',
+  externalLink: row.external_link ?? undefined,
+  createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+});
+
+const mapShoppingItem = (row: ShoppingRow): ShoppingItem => ({
+  id: row.id,
+  name: row.name,
+  quantity: Number(row.quantity ?? 0),
+  unit: row.unit ?? '',
+  completed: !!row.completed,
+  fromRecipeId: row.from_recipe_id ?? undefined,
+});
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('recipes');
-  
-  // -- State Initialization with LocalStorage --
-  const [recipes, setRecipes] = useState<Recipe[]>(() => {
-    const saved = localStorage.getItem('chefmate_recipes');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  const [shoppingList, setShoppingList] = useState<ShoppingItem[]>(() => {
-    const saved = localStorage.getItem('chefmate_shopping');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  // -- Persistence Effects --
-  useEffect(() => {
-    localStorage.setItem('chefmate_recipes', JSON.stringify(recipes));
-  }, [recipes]);
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [shoppingList, setShoppingList] = useState<ShoppingItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    localStorage.setItem('chefmate_shopping', JSON.stringify(shoppingList));
-  }, [shoppingList]);
+    const loadData = async () => {
+      try {
+        setIsLoading(true);
+        const [recipeRes, shoppingRes] = await Promise.all([
+          supabase.from('recipes').select('*').order('created_at', { ascending: false }),
+          supabase.from('shopping_items').select('*').order('created_at', { ascending: false }),
+        ]);
+
+        if (recipeRes.error) throw recipeRes.error;
+        if (shoppingRes.error) throw shoppingRes.error;
+
+        setRecipes((recipeRes.data ?? []).map(mapRecipe));
+        setShoppingList((shoppingRes.data ?? []).map(mapShoppingItem));
+        setErrorMessage(null);
+      } catch (err: any) {
+        console.error('Failed to load data from Supabase:', err);
+        setErrorMessage('Nem sikerült betölteni az adatokat. Ellenőrizd a kapcsolatot és a táblákat a Supabase-ben.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
 
   // -- Handlers --
-  const handleAddItemsToShoppingList = (items: ShoppingItem[]) => {
-    setShoppingList(prev => {
-      // Optional: Merge items with same name and unit
-      const newList = [...prev];
-      items.forEach(newItem => {
-        const existingIndex = newList.findIndex(
-          i => i.name.toLowerCase() === newItem.name.toLowerCase() && 
-               i.unit.toLowerCase() === newItem.unit.toLowerCase() &&
-               !i.completed // Only merge with active items
+  const handleAddItemsToShoppingList = async (items: ShoppingItem[]) => {
+    try {
+      let updatedList = [...shoppingList];
+      const itemsToInsert: ShoppingItem[] = [];
+
+      for (const newItem of items) {
+        const existingIndex = updatedList.findIndex(
+          i =>
+            i.name.toLowerCase() === newItem.name.toLowerCase() &&
+            i.unit.toLowerCase() === newItem.unit.toLowerCase() &&
+            !i.completed
         );
 
         if (existingIndex > -1) {
-          newList[existingIndex].quantity += newItem.quantity;
+          const existing = updatedList[existingIndex];
+          const newQuantity = existing.quantity + newItem.quantity;
+          const { data, error } = await supabase
+            .from('shopping_items')
+            .update({ quantity: newQuantity })
+            .eq('id', existing.id)
+            .select()
+            .single();
+          if (error) throw error;
+          updatedList[existingIndex] = mapShoppingItem(data as ShoppingRow);
         } else {
-          newList.push(newItem);
+          itemsToInsert.push(newItem);
         }
-      });
-      return newList;
-    });
-    // Switch to shopping tab to show user feedback or let them stay?
-    // Let's create a brief toast notification logic ideally, but for now we stay on recipes
-    // and show a badge or similar. We will just alert nicely or use UI feedback in the component.
+      }
+
+      if (itemsToInsert.length > 0) {
+        const { data, error } = await supabase
+          .from('shopping_items')
+          .insert(
+            itemsToInsert.map((i) => ({
+              name: i.name,
+              quantity: i.quantity,
+              unit: i.unit,
+              completed: false,
+              from_recipe_id: i.fromRecipeId ?? null,
+            }))
+          )
+          .select();
+        if (error) throw error;
+        const inserted = (data ?? []).map((row) => mapShoppingItem(row as ShoppingRow));
+        updatedList = [...inserted, ...updatedList];
+      }
+
+      setShoppingList(updatedList);
+      setErrorMessage(null);
+    } catch (err) {
+      console.error('Failed to sync shopping list items:', err);
+      setErrorMessage('Nem sikerült frissíteni a bevásárló listát.');
+    }
   };
 
   return (
@@ -100,7 +182,11 @@ const App: React.FC = () => {
 
       {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto no-scrollbar p-4">
-        {activeTab === 'recipes' ? (
+        {isLoading ? (
+          <div className="text-center text-gray-500 py-10">Betöltés...</div>
+        ) : errorMessage ? (
+          <div className="text-center text-red-500 py-10 text-sm">{errorMessage}</div>
+        ) : activeTab === 'recipes' ? (
           <RecipeManager 
             recipes={recipes} 
             setRecipes={setRecipes} 

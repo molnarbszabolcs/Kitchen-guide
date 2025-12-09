@@ -8,6 +8,7 @@ export interface Ingredient {
 export interface Recipe {
   id: string;
   name: string;
+  course: string;
   servings: number;
   ingredients: Ingredient[];
   instructions: string;
