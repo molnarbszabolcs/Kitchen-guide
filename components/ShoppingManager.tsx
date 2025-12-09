@@ -1,0 +1,180 @@
+import React, { useState } from 'react';
+import { ShoppingItem } from '../types';
+import { generateId, formatQuantity } from '../utils/helpers';
+
+interface ShoppingManagerProps {
+  items: ShoppingItem[];
+  setItems: React.Dispatch<React.SetStateAction<ShoppingItem[]>>;
+}
+
+const ShoppingManager: React.FC<ShoppingManagerProps> = ({ items, setItems }) => {
+  const [manualName, setManualName] = useState('');
+  const [manualQty, setManualQty] = useState<number | string>(1);
+  const [manualUnit, setManualUnit] = useState('');
+
+  const toggleComplete = (id: string) => {
+    setItems(items.map(item => 
+      item.id === id ? { ...item, completed: !item.completed } : item
+    ));
+  };
+
+  const removeItem = (id: string) => {
+    setItems(items.filter(item => item.id !== id));
+  };
+
+  const clearCompleted = () => {
+    if (window.confirm('Clear all completed items?')) {
+      setItems(items.filter(item => !item.completed));
+    }
+  };
+  
+  const clearAll = () => {
+    if (window.confirm('Clear the entire list?')) {
+      setItems([]);
+    }
+  };
+
+  const handleManualAdd = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualName.trim()) return;
+
+    const newItem: ShoppingItem = {
+      id: generateId(),
+      name: manualName,
+      quantity: Number(manualQty) || 1,
+      unit: manualUnit,
+      completed: false
+    };
+
+    // Simple merge logic for manual add
+    const existingIndex = items.findIndex(
+      i => i.name.toLowerCase() === newItem.name.toLowerCase() && 
+           i.unit.toLowerCase() === newItem.unit.toLowerCase() &&
+           !i.completed
+    );
+
+    if (existingIndex > -1) {
+      const updated = [...items];
+      updated[existingIndex].quantity += newItem.quantity;
+      setItems(updated);
+    } else {
+      setItems([newItem, ...items]);
+    }
+
+    setManualName('');
+    setManualQty(1);
+    setManualUnit('');
+  };
+
+  // Sort: Incomplete first, then by name
+  const sortedItems = [...items].sort((a, b) => {
+    if (a.completed === b.completed) return 0;
+    return a.completed ? 1 : -1;
+  });
+
+  return (
+    <div className="space-y-6">
+      {/* Manual Add Input */}
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+        <form onSubmit={handleManualAdd} className="flex flex-col gap-3">
+            <h3 className="text-sm font-semibold text-gray-700">Quick Add</h3>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={manualName}
+                onChange={e => setManualName(e.target.value)}
+                placeholder="Item name..."
+                className="flex-1 px-4 py-2 rounded-lg bg-gray-50 border-transparent focus:bg-white focus:border-indigo-500 focus:ring-0"
+              />
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                value={manualQty}
+                onChange={e => setManualQty(e.target.value)}
+                placeholder="Qty"
+                className="w-20 px-3 py-2 rounded-lg bg-gray-50 border-transparent focus:bg-white focus:border-indigo-500 focus:ring-0 text-center"
+              />
+               <input
+                type="text"
+                value={manualUnit}
+                onChange={e => setManualUnit(e.target.value)}
+                placeholder="Unit"
+                className="w-20 px-3 py-2 rounded-lg bg-gray-50 border-transparent focus:bg-white focus:border-indigo-500 focus:ring-0 text-center"
+              />
+              <button 
+                type="submit" 
+                className="flex-1 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors"
+              >
+                Add
+              </button>
+            </div>
+        </form>
+      </div>
+
+      {/* List */}
+      <div>
+        <div className="flex justify-between items-end mb-3 px-1">
+          <h2 className="text-lg font-bold text-gray-800">Your List <span className="text-gray-400 font-normal text-sm">({items.filter(i => !i.completed).length})</span></h2>
+          <div className="flex gap-2">
+             {items.some(i => i.completed) && (
+                <button onClick={clearCompleted} className="text-xs font-semibold text-red-500 hover:text-red-600 bg-red-50 px-3 py-1.5 rounded-full transition-colors">
+                  Clear Done
+                </button>
+             )}
+             {items.length > 0 && (
+                <button onClick={clearAll} className="text-xs font-semibold text-gray-500 hover:text-gray-700 bg-gray-200 px-3 py-1.5 rounded-full transition-colors">
+                  Clear All
+                </button>
+             )}
+          </div>
+        </div>
+
+        {items.length === 0 ? (
+          <div className="text-center py-16 text-gray-400">
+            <i className="fa-solid fa-basket-shopping text-5xl mb-4 text-gray-200"></i>
+            <p>Your list is empty.</p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden divide-y divide-gray-50">
+            {sortedItems.map(item => (
+              <div 
+                key={item.id} 
+                className={`flex items-center p-4 transition-all duration-300 ${item.completed ? 'bg-gray-50/50' : 'hover:bg-gray-50'}`}
+              >
+                <button 
+                  onClick={() => toggleComplete(item.id)}
+                  className={`w-6 h-6 rounded-full border-2 flex items-center justify-center mr-4 transition-all duration-300 ${
+                    item.completed 
+                    ? 'bg-green-500 border-green-500' 
+                    : 'border-gray-300 hover:border-indigo-500'
+                  }`}
+                >
+                  {item.completed && <i className="fa-solid fa-check text-white text-xs"></i>}
+                </button>
+
+                <div className="flex-1 cursor-pointer" onClick={() => toggleComplete(item.id)}>
+                  <p className={`font-medium text-gray-800 transition-all ${item.completed ? 'line-through text-gray-400' : ''}`}>
+                    {item.name}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {formatQuantity(item.quantity)} {item.unit}
+                  </p>
+                </div>
+
+                <button 
+                  onClick={() => removeItem(item.id)}
+                  className="text-gray-300 hover:text-red-400 w-8 h-8 flex items-center justify-center transition-colors"
+                >
+                  <i className="fa-solid fa-times"></i>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default ShoppingManager;

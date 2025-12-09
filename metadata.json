@@ -1,0 +1,5 @@
+{
+  "name": "ChefMate",
+  "description": "A modern, Apple-style recipe manager and shopping list application with serving scaling capabilities.",
+  "requestFramePermissions": []
+}
