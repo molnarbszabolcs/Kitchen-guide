@@ -52,6 +52,9 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const normalizeText = (value?: string | null) => (value ?? '').trim();
+  const normalizeForMatch = (value?: string | null) => normalizeText(value).toLowerCase();
+
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -81,14 +84,28 @@ const App: React.FC = () => {
   // -- Handlers --
   const handleAddItemsToShoppingList = async (items: ShoppingItem[]) => {
     try {
+      const sanitizedItems = items
+        .map((item) => ({
+          ...item,
+          name: normalizeText(item.name),
+          unit: normalizeText(item.unit),
+          quantity: Number(item.quantity) || 0,
+        }))
+        .filter((item) => item.name && Number.isFinite(item.quantity) && item.quantity > 0);
+
+      if (sanitizedItems.length === 0) {
+        setErrorMessage('Nincs érvényes tétel a bevásárló listához.');
+        return;
+      }
+
       let updatedList = [...shoppingList];
       const itemsToInsert: ShoppingItem[] = [];
 
-      for (const newItem of items) {
+      for (const newItem of sanitizedItems) {
         const existingIndex = updatedList.findIndex(
           i =>
-            i.name.toLowerCase() === newItem.name.toLowerCase() &&
-            i.unit.toLowerCase() === newItem.unit.toLowerCase() &&
+            normalizeForMatch(i.name) === normalizeForMatch(newItem.name) &&
+            normalizeForMatch(i.unit) === normalizeForMatch(newItem.unit) &&
             !i.completed
         );
 
@@ -117,7 +134,6 @@ const App: React.FC = () => {
               quantity: i.quantity,
               unit: i.unit,
               completed: false,
-              from_recipe_id: i.fromRecipeId ?? null,
             }))
           )
           .select();
@@ -129,7 +145,7 @@ const App: React.FC = () => {
       setShoppingList(updatedList);
       setErrorMessage(null);
     } catch (err) {
-      console.error('Failed to sync shopping list items:', err);
+      console.error('Failed to sync shopping list items:', err?.message ?? err, err);
       setErrorMessage('Nem sikerült frissíteni a bevásárló listát.');
     }
   };
@@ -139,12 +155,15 @@ const App: React.FC = () => {
       
       {/* Sticky Top Navigation */}
       <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-200 pt-safe-top">
-        <div className="flex justify-between items-center px-4 py-3">
-          <h1 className="text-xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
-            <span className="bg-indigo-600 text-white p-1.5 rounded-lg text-sm">
-              <i className="fa-solid fa-utensils"></i>
+        <div className="flex justify-center items-center px-4 py-3">
+          <h1 className="text-xl font-bold text-pink-600 tracking-tight flex items-center gap-2">
+            <span className="text-pink-500 text-xl" role="img" aria-label="Muffin">
+              🧁
             </span>
-            ChefMate
+            Sziszi's Kithen Guide
+            <span className="text-pink-500 text-xl" role="img" aria-label="Muffin">
+              🧁
+            </span>
           </h1>
         </div>
 
@@ -159,7 +178,7 @@ const App: React.FC = () => {
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              <i className="fa-solid fa-book-open"></i> Recipes
+              <i className="fa-solid fa-book-open"></i> Receptek
             </button>
             <button
               onClick={() => setActiveTab('shopping')}
@@ -169,7 +188,7 @@ const App: React.FC = () => {
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              <i className="fa-solid fa-cart-shopping"></i> Shopping
+              <i className="fa-solid fa-cart-shopping"></i> Bevásárlólista
               {shoppingList.filter(i => !i.completed).length > 0 && (
                 <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[1.25rem]">
                   {shoppingList.filter(i => !i.completed).length}
