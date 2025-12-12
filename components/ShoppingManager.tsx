@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ShoppingItem } from '../types';
-import { formatQuantity } from '../utils/helpers';
+import { formatQuantity, generateId } from '../utils/helpers';
 import { supabase } from '../utils/supabase';
 
 interface ShoppingManagerProps {
@@ -86,6 +86,7 @@ const ShoppingManager: React.FC<ShoppingManagerProps> = ({ items, setItems }) =>
     if (!manualName.trim()) return;
 
     const newItem: ShoppingItem = {
+      id: generateId(),
       name: manualName,
       quantity: Number(manualQty) || 1,
       unit: manualUnit,
