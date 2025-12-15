@@ -160,7 +160,7 @@ const App: React.FC = () => {
             <span className="text-pink-500 text-xl" role="img" aria-label="Muffin">
               🧁
             </span>
-            Sziszi's Kithen Guide
+            Sziszi's Kitchen Guide
             <span className="text-pink-500 text-xl" role="img" aria-label="Muffin">
               🧁
             </span>
